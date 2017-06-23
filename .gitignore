@@ -1,0 +1,8 @@
+artifacts/
+lib/
+*.bak
+*.bin
+*.elf
+*.img
+*.lps
+build-errors.txt

@@ -1,16 +1,20 @@
-program DiagnosticConsoleProgram;
+unit DiagnosticConsoleUnit;
 {$mode delphi}{$h+}
 
+interface
+procedure DiagnosticConsoleLog(S:String);
+
+implementation
 uses
- QEMUVersatilePB,PlatformQemuVpb,VersatilePb,
+ QEMUVersatilePB,VersatilePb,
  Classes,Console,GlobalConfig,GlobalConst,GlobalTypes,
- HeapManager,Http,Logging,Platform,Serial,
- Services,StrUtils,SysUtils,Threads,Ultibo,WebStatus,Winsock2;
+ HeapManager,Logging,Platform,Serial,
+ Services,SysUtils,Threads,Ultibo;
 
 var
  ScopeWindow,MessagesWindow:TWindowHandle;
 
-procedure Log(S:String);
+procedure DiagnosticConsoleLog(S:String);
 begin
  LoggingOutput(S);
  ConsoleWindowWriteLn(MessagesWindow,S);
@@ -137,90 +141,58 @@ begin
   end;
 end;
 
-procedure ParseCommandLine;
-var
- I:Cardinal;
- Param:String;
- procedure ParseString(Option:String; var Value:String);
- var
-  Start:Cardinal;
- begin
-  if AnsiStartsStr(Option + '=',Param) then
-   begin
-    Start:=PosEx('=',Param);
-    Value:=MidStr(Param,Start + 1,Length(Param) - Start);
-   end;
- end;
+procedure DiagnosticConsoleUpdate;
 begin
- Log(Format('Command Line = <%s>',[GetCommandLine]));
- for I:=0 to ParamCount do
-  begin
-   Param:=ParamStr(I);
-   Log(Format('Param %d = %s',[I,Param]));
-  end;
-end;
-
-var
- HTTPListener:THTTPListener;
-
-procedure StartHttpServer;
-begin
- HTTPListener:=THTTPListener.Create;
- WebStatusRegister(HTTPListener,'','',True);
- HTTPListener.Active:=True;
-end;
-
-function GetIpAddress:String;
-var
- Winsock2TCPClient:TWinsock2TCPClient;
-begin
- Log('Obtaining IP address ...');
- Winsock2TCPClient:=TWinsock2TCPClient.Create;
- Result:=Winsock2TCPClient.LocalAddress;
- while (Result = '') or (Result = '0.0.0.0') or (Result = '255.255.255.255') do
-  begin
-   Sleep(100);
-   Result:=Winsock2TCPClient.LocalAddress;
-  end;
- Winsock2TCPClient.Free;
+ SystemDiagnostic.Update;
 end;
 
 const
  DiagnosticPointer=(64 - 1) * 1024*1024;
 
-procedure Main;
+var
+ IdleThread:TThreadHandle;
+
+function IdleThreadProcedure(Parameter:Pointer):PtrInt;
+begin
+ Result:=0;
+ ThreadSetName(GetCurrentThreadId,'IdleThread');
+ while True do
+  begin
+   PLongWord(VERSATILEPB_UART1_REGS_BASE)^:=Ord('a');
+   Sleep(1*1000);
+  end;
+end;
+
+var
+ ScopeThread:TThreadHandle;
+
+function ScopeThreadProcedure(Parameter:Pointer):PtrInt;
+begin
+ Result:=0;
+ ThreadSetName(GetCurrentThreadId,'ScopeThread');
+ while True do
+  begin
+   SystemDiagnostic.Update;
+   Sleep(200);
+  end;
+end;
+
+procedure InitDiagnosticConsole;
 begin
  SystemDiagnostic:=TSystemDiagnostic.Create(Pointer(DiagnosticPointer));
+ IdleThread:=BeginThread(@IdleThreadProcedure,nil,IdleThread,THREAD_STACK_DEFAULT_SIZE);
  ScopeWindow:=ConsoleWindowCreate(ConsoleDeviceGetDefault,CONSOLE_POSITION_TOP,True);
  ConsoleWindowSetBackColor(ScopeWindow,COLOR_ORANGE);
  MessagesWindow:=ConsoleWindowCreate(ConsoleDeviceGetDefault,CONSOLE_POSITION_BOTTOM,False);
  ConsoleWindowSetBackColor(MessagesWindow,COLOR_WHITE);
  ConsoleClrScr;
+ ScopeThread:=BeginThread(@ScopeThreadProcedure,nil,ScopeThread,THREAD_STACK_DEFAULT_SIZE);
  StartLogging;
- Sleep(500);
- Log('');
- Log('program start');
- GetIpAddress;
- StartHttpServer;
- Log(Format('TSystemDiagnostic data starts at 0x%x',[DiagnosticPointer + 32]));
- ParseCommandLine;
- Log(Format('Ultibo Release %s %s %s',[ULTIBO_RELEASE_DATE,ULTIBO_RELEASE_NAME,ULTIBO_RELEASE_VERSION]));
- Log('');
- while True do
-  begin
-   SystemDiagnostic.Update;
-   PLongWord(VERSATILEPB_UART2_REGS_BASE)^:=Ord('a');
-  end;
+ DiagnosticConsoleLog(Format('Ultibo Release %s %s %s',[ULTIBO_RELEASE_DATE,ULTIBO_RELEASE_NAME,ULTIBO_RELEASE_VERSION]));
+ DiagnosticConsoleLog(Format('TSystemDiagnostic data starts at 0x%x',[DiagnosticPointer + 32]));
+ DiagnosticConsoleLog('');
 end;
 
-begin
- try
-  Main;
- except on E:Exception do
-  begin
-   Log(Format('Exception.Message %s',[E.Message]));
-   Sleep(5*1000);
-  end;
- end;
- Log('program stop');
+initialization
+ InitDiagnosticConsole;
 end.
