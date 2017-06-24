@@ -79,12 +79,10 @@ const
 
 function ThreadIndex(Name:String):LongWord;
 begin
-  if Name = 'TXThread' then
+  if Name = 'TCP Listener' then
     Result:=1
-  else if Name = 'TCP Listener' then
-    Result:=2
   else if Name = 'TCP Server' then
-    Result:=3
+    Result:=2
   else
     Result:=0;
 end;
@@ -118,9 +116,9 @@ procedure TSystemDiagnostic.Update;
 
 var
   HeapStatus:THeapStatus;
-  I, J: Integer;
   ThreadSnapShot, Current: PThreadSnapShot;
   ThreadStates: TThreadStates;
+  AgeInSeconds:Integer;
 begin
   if not Valid then
     Exit;
@@ -140,14 +138,21 @@ begin
       Inc(ThreadStates[ThreadIndex(Current.Name), Current.State]);
       Current := Current.Next;
     end;
+    Line(Format('   Up Time %s Clock %6.3f', [FileTimeToSysLogDateTime(UpTime), ClockGetTotal / (1000 * 1000)]));
+    Line(Format('   THeapstatus.TotalFree %8d Total Terminated Threads %3d', [Storage.TotalFree,Storage.TerminatedThreadCount]));
+    WriteStates(ThreadStates, 1, 'TCP Listener');
+    WriteStates(ThreadStates, 2, 'TCP Server');
+    Current := ThreadSnapShot;
+    while Current <> nil do
+    begin
+      AgeInSeconds:=Round((ClockGetTime - Current.CreateTime) / (10 * 1000 * 1000));
+      if (Current.Name = 'TCP Server') and (AgeInSeconds >= 35) then
+        WriteLn(Format('TCP Server Handle %8.8x Age %3d Seconds Current State %d',[Current.Handle,AgeinSeconds,Current.State]));
+      Current := Current.Next;
+    end;
   finally
     ThreadSnapShotDestroy(ThreadSnapShot);
   end;
-  Line(Format('   Up Time %s', [FileTimeToSysLogDateTime(UpTime)]));
-  Line(Format('   THeapstatus.TotalFree %8d Terminated Threads %3d', [Storage.TotalFree,Storage.TerminatedThreadCount]));
-  WriteStates(ThreadStates, 1, 'TXThread');
-  WriteStates(ThreadStates, 2, 'TCP Listener');
-  WriteStates(ThreadStates, 3, 'TCP Server');
 end;
 
 procedure DiagnosticConsoleUpdate;

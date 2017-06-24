@@ -1,8 +1,11 @@
 artifacts/
 lib/
+obj/
 *.bak
 *.bin
 *.elf
 *.img
 *.lps
 build-errors.txt
+errors.txt
+serial*.txt
