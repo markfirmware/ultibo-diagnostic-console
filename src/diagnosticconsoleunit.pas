@@ -146,8 +146,8 @@ begin
     while Current <> nil do
     begin
       AgeInSeconds:=Round((ClockGetTime - Current.CreateTime) / (10 * 1000 * 1000));
-      if (Current.Name = 'TCP Server') and (AgeInSeconds >= 35) then
-        WriteLn(Format('TCP Server Handle %8.8x Age %3d Seconds Current State %d',[Current.Handle,AgeinSeconds,Current.State]));
+      if (Current.Name = 'TCP Server') and (AgeInSeconds >= 60) then
+        Line(Format('TCP Server Handle %8.8x Age %3d Seconds Current State %d',[Current.Handle,AgeinSeconds,Current.State]));
       Current := Current.Next;
     end;
   finally
